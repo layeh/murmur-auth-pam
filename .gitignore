@@ -1,0 +1,3 @@
+/MurmurRPC/*.o
+/MurmurRPC/*.pb.*
+/murmur-auth-pam
