@@ -2,9 +2,6 @@ syntax = "proto2";
 
 package MurmurRPC;
 
-// TODO(grpc): should all time related (uptime, etc.) fields be replaced with
-// a new message that has an absolute (i.e. epoch timestamp)?
-
 message Void {
 }
 
@@ -209,7 +206,6 @@ service LogService {
 	rpc Query(Log.Query) returns(Log.List);
 }
 
-// TODO(grpc): list common configuration field names?
 message Config {
 	// The server for which the configuration is for.
 	optional Server server = 1;
@@ -358,7 +354,8 @@ message User {
 		optional Server server = 1;
 		// The user to kick.
 		optional User user = 2;
-		// TODO(grpc): optional User actor = 3;
+		// The user who performed the kick.
+		optional User actor = 3;
 		// The reason for why the user is being kicked.
 		optional string reason = 4;
 	}
@@ -389,11 +386,16 @@ message Tree {
 	repeated Tree children = 3;
 	// The users in the current channel.
 	repeated User users = 4;
+
+	message Query {
+		// The server to query.
+		optional Server server = 1;
+	}
 }
 
 service TreeService {
-	// Get returns a representation of the server's channel/user tree.
-	rpc Get(Server) returns(Tree);
+	// Query returns a representation of the given server's channel/user tree.
+	rpc Query(Tree.Query) returns(Tree);
 }
 
 message Ban {
@@ -457,47 +459,71 @@ message ACL {
 	}
 
 	message Group {
+		// The ACL group name.
 		optional string name = 1;
+		// Is the group inherited?
 		optional bool inherited = 2;
+		// Does the group inherit members?
 		optional bool inherit = 3;
+		// Can this group be inherited by its children?
 		optional bool inheritable = 4;
 
+		// The users explicitly added by this group.
 		repeated DatabaseUser users_add = 5;
+		// The users explicitly removed by this group.
 		repeated DatabaseUser users_remove = 6;
+		// All of the users who are part of this group.
 		repeated DatabaseUser users = 7;
 	}
 
+	// Does the ACL apply to the current channel?
 	optional bool apply_here = 3;
+	// Does the ACL apply to the current channel's sub-channels?
 	optional bool apply_subs = 4;
+	// Was the ACL inherited?
 	optional bool inherited = 5;
 
+	// The user to whom the ACL applies.
 	optional DatabaseUser user = 6;
-	optional string group = 7; // TODO(grpc): change to ACL.Group?
+	// The group to whom the ACL applies.
+	optional ACL.Group group = 7;
 
+	// The permissions granted by the ACL.
 	optional Permission allow = 8;
+	// The permissions denied by the ACL.
 	optional Permission deny = 9;
 
 	message Query {
+		// The server where the user and channel exist.
 		optional Server server = 1;
+		// The user to query.
 		optional User user = 2;
+		// The channel to query.
 		optional Channel channel = 3;
 	}
 
 	message List {
+		// The server on which the ACLs exist.
 		optional Server server = 1;
+		// The channel to which the ACL refers.
 		optional Channel channel = 2;
-
+		// The ACLs part of the given channel.
 		repeated ACL acls = 3;
+		// The groups part of the given channel.
 		repeated ACL.Group groups = 4;
+		// Should ACLs be inherited from the parent channel.
 		optional bool inherit = 5;
 	}
 
 	message TemporaryGroup {
+		// The server where the temporary group exists.
 		optional Server server = 1;
-
+		// The channel to which the temporary user group is added.
 		optional Channel channel = 2;
+		// The user who is added to the group.
 		optional User user = 3;
-		optional string group_name = 4;
+		// The name of the temporary group.
+		optional string name = 4;
 	}
 }
 
@@ -517,19 +543,20 @@ service ACLService {
 	rpc RemoveTemporaryGroup(ACL.TemporaryGroup) returns(Void);
 }
 
-// When building a custom authenticator, only Authenticate and Find messages
-// need to have valid replies. All other request responses messages can be
-// omitted in the Response.
 message Authenticator {
 	message Request {
 		// An authentication request for a connecting user.
 		message Authenticate {
+			// The user's name.
 			optional string name = 1;
+			// The user's password.
 			optional string password = 2;
+			// The user's certificate chain in DER format.
 			repeated bytes certificates = 3;
+			// The hexadecimal hash of the user's certificate.
 			optional string certificate_hash = 4;
+			// If the user is connecting with a strong certificate.
 			optional bool strong_certificate = 5;
-			// TODO(grpc): include IP address?
 		}
 
 		// A request for information about a user, given by either the user's ID
@@ -587,10 +614,7 @@ message Authenticator {
 			optional Status status = 1;
 			optional uint32 id = 2;
 			optional string name = 3;
-			//repeated string groups = 4; // TODO(grpc): ACL.Group?
-			// TODO(grpc): is groups really needed? Can't we just call
-			// ACLService.AddTemporaryGroup? Will need to pass the session/User object
-			// to the authenticator for this to happen.
+			repeated ACL.Group groups = 4;
 		}
 
 		message Find {
@@ -683,7 +707,7 @@ service DatabaseService {
 	// Get returns the database user with the given id.
 	rpc Get(DatabaseUser) returns(DatabaseUser);
 	// Update updates the given database user.
-	rpc Update(DatabaseUser) returns(Void); // TODO(grpc): should the updated user be returned?
+	rpc Update(DatabaseUser) returns(Void);
 	// Register registers a user with the given information on the server. The
 	// returned DatabaseUser will contain the newly registered user's ID.
 	rpc Register(DatabaseUser) returns(DatabaseUser);
@@ -699,15 +723,18 @@ message RedirectWhisperGroup {
 	// The user to whom the redirection will be applied.
 	optional User user = 2;
 	// The source group.
-	optional string source = 3; // TODO(grpc): should be ACL.Group?
+	optional ACL.Group source = 3;
 	// The target group.
-	optional string target = 4; // TODO(grpc): should be ACL.Group?
+	optional ACL.Group target = 4;
 }
 
 service AudioService {
-	// SetRedirectWhisperGroup redirects whisper targets for the given user.
-	// Whenever a user tries to whisper to group "source", the whisper will be
-	// redirected to group "target". Omitting "target" will remove the redirect.
-	rpc SetRedirectWhisperGroup(RedirectWhisperGroup) returns(Void);
-	// TODO(grpc): convert to AddRedirectWhisperGroup + RemoveRedirectWhisperGroup?
+	// AddRedirectWhisperGroup add a whisper targets redirection for the given
+	// user. Whenever a user whispers to group "source", the whisper will be
+	// redirected to group "target".
+	rpc AddRedirectWhisperGroup(RedirectWhisperGroup) returns(Void);
+
+	// RemoveRedirectWhisperGroup removes a whisper target redirection for
+	// the the given user.
+	rpc RemoveRedirectWhisperGroup(RedirectWhisperGroup) returns(Void);
 }
