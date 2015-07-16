@@ -60,11 +60,11 @@ int main(int argc, char *argv[]) {
 
 	auto channel = grpc::CreateChannel(argv[1], grpc::InsecureCredentials(), grpc::ChannelArguments());
 	grpc::ClientContext ctx;
-	auto stub = MurmurRPC::AuthenticatorService::NewStub(channel);
+	auto client = MurmurRPC::V1::NewStub(channel);
 
 	BOOST_LOG_TRIVIAL(info) << "Starting murmur-auth-pam";
 
-	auto stream = stub->Stream(&ctx);
+	auto stream = client->AuthenticatorStream(&ctx);
 
 	MurmurRPC::Authenticator_Response init;
 	init.mutable_initialize()->mutable_server()->set_id(1);
